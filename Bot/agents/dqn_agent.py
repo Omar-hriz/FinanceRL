@@ -20,7 +20,7 @@ class DQNAgent:
         self.env = env
         self.history_length = history_length
         self.actions = ["buy", "sell", "hold"]
-        self.input_dim = len(self.env.data.columns) * history_length
+        self.input_dim = len(self.env.data.columns)
         self.output_dim = len(self.actions)
 
         self.model = QNetwork(self.input_dim, self.output_dim)

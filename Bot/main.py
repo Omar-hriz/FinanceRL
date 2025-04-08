@@ -1,7 +1,7 @@
 import yfinance as yf
 import pandas as pd
-import os
 import matplotlib.pyplot as plt
+import os
 
 from envs.base_market_env import BaseMarketEnv
 from agents.hold_buy_agent import HoldBuyAgent
@@ -14,40 +14,49 @@ df_full = yf.download("AAPL", period="6mo", interval="1d").dropna().reset_index(
 os.makedirs("data", exist_ok=True)
 df_full.to_csv("data/AAPL.csv", index=False)
 
-# 2. Extraire uniquement les colonnes nécessaires
+# 2. Extraire uniquement les colonnes numériques utiles
 df = df_full[["Close", "Volume"]]
 
-# 3. Définir une fonction pour tester un agent
-def test_agent(agent_class, label, train=False):
+# 3. Initialiser l’environnement
+env_base = BaseMarketEnv(df, initial_cash=1000.0, trading_cost=0.001)
+
+# 4. Définir les agents
+agents = {
+    "Hold & Buy": HoldBuyAgent,
+    "Random": RandomAgent,
+    "Buy & Sell Alterné": BuyAndSellAgent,
+    "DQN": DQNAgent,
+}
+
+results = {}
+
+# 5. Entraîner et exécuter chaque agent
+for name, AgentClass in agents.items():
+    print(f"\n▶ Agent : {name}")
+    # Recréer un environnement propre pour chaque agent
     env = BaseMarketEnv(df, initial_cash=1000.0, trading_cost=0.001)
-    if agent_class.__name__ == "DQNAgent":
-        agent = agent_class(env, history_length=10)
-        if train:
-            agent.train(episodes=20)
+
+    # Créer l'agent
+    if name == "DQN":
+        agent = AgentClass(env, history_length=1)
+        agent.train(episodes=10)
     else:
-        agent = agent_class(env)
-        if train:
-            agent.train()
+        agent = AgentClass(env)
+        agent.train()
+
+    # Exécuter l'agent
     total_reward, portfolio_values = agent.run()
-    print(f"{label} - Reward: {total_reward:.2f} - Final Portfolio: {portfolio_values[-1]:.2f}")
-    return label, portfolio_values
+    print(f"{name} - Reward: {total_reward:.2f} | Final Value: {portfolio_values[-1]:.2f}")
+    results[name] = portfolio_values
 
-# 4. Tester chaque agent
-results = []
-results.append(test_agent(HoldBuyAgent, "Hold & Buy"))
-results.append(test_agent(RandomAgent, "Random"))
-results.append(test_agent(BuyAndSellAgent, "Buy & Sell"))
-results.append(test_agent(DQNAgent, "DQN (Deep RL)", train=True))
-
-# 5. Visualisation
+# 6. Afficher les courbes
 plt.figure(figsize=(12, 6))
-for label, portfolio in results:
-    plt.plot(portfolio, label=label)
-
-plt.title("Comparaison des agents de trading")
-plt.xlabel("Jours")
+for name, values in results.items():
+    plt.plot(values, label=name)
+plt.title("Évolution de la valeur du portefeuille selon l'agent")
+plt.xlabel("Jour")
 plt.ylabel("Valeur du portefeuille ($)")
-plt.grid(True)
 plt.legend()
+plt.grid(True)
 plt.tight_layout()
 plt.show()

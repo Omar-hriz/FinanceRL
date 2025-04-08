@@ -4,13 +4,13 @@ from gymnasium import spaces
 
 
 class BaseMarketEnv(gym.Env):
-    def __init__(self, df, initial_cash=1000.0, trading_cost=0.001):
+    def __init__(self, df, initial_cash=1000.0, trading_cost=0.001, history_length=1):
         super(BaseMarketEnv, self).__init__()
         self.df = df.reset_index(drop=True)
         self.initial_cash = initial_cash
         self.trading_cost = trading_cost
         self.current_step = 0
-
+        self.history_length = history_length
         self.cash = initial_cash
         self.position = 0
         self.portfolio_value = self.cash

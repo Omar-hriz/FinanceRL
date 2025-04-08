@@ -1,25 +1,24 @@
-class HoldBuyAgent:
+class BuyAndSellAgent:
     def __init__(self, env):
         self.env = env
 
     def train(self):
-        # Aucun entraînement requis pour cet agent
         pass
 
     def run(self):
         state = self.env.reset()
         done = False
-        bought = False
+        step = 0
+        portfolio = []
 
         while not done:
-            # Acheter une fois, puis ne rien faire (hold)
-            if not bought:
+            if step % 2 == 0:
                 action = "buy"
-                bought = True
             else:
-                action = "hold"  # action ignorée par l’environnement
+                action = "sell"
 
             state, reward, done, _ = self.env.step(action)
+            portfolio.append(self.env.portfolio_value[-1])
+            step += 1
 
-        portfolio = self.env.get_portfolio_value()
         return portfolio[-1] - portfolio[0], portfolio

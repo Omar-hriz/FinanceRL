@@ -1,70 +1,41 @@
-import gymnasium as gym
 import numpy as np
-from gymnasium import spaces
 
-
-class BaseMarketEnv(gym.Env):
-    def __init__(self, df, initial_cash=1000.0, trading_cost=0.001):
-        super(BaseMarketEnv, self).__init__()
-        self.df = df.reset_index(drop=True)
+class BaseMarketEnv:
+    def __init__(self, data, initial_cash=1000.0, trading_cost=0.001):
+        self.data = data.reset_index(drop=True)
         self.initial_cash = initial_cash
         self.trading_cost = trading_cost
-        self.current_step = 0
+        self.reset()
 
-        self.cash = initial_cash
-        self.position = 0
-        self.portfolio_value = self.cash
-
-        self.action_space = spaces.Discrete(3)
-
-        self.observation_space = spaces.Box(
-            low=-np.inf,
-            high=np.inf,
-            shape=(df.shape[1] + 2,),
-            dtype=np.float32
-        )
-
-    def reset(self, seed=None, options=None):
+    def reset(self):
         self.current_step = 0
         self.cash = self.initial_cash
-        self.position = 0
-        self.portfolio_value = self.cash
+        self.stock_owned = 0
+        self.portfolio_value = [self.cash]
         return self._get_observation()
 
-    def step(self, action):
-        prev_price = self._get_price()
+    def _get_observation(self):
+        return self.data.iloc[self.current_step].values
 
-        if action == 0:
-            self.cash += self.position * prev_price
-            self.position = 0
-        elif action == 2:
-            if self.cash > 0:
-                self.position += self.cash / prev_price
-                self.cash = 0
+    def step(self, action):
+        price = float(self.data.iloc[self.current_step]["Close"])
+
+        if action == "buy" and self.cash >= price:
+            self.stock_owned = self.cash * (1 - self.trading_cost) / price
+            self.cash = 0
+
+        elif action == "sell" and self.stock_owned > 0:
+            self.cash = self.stock_owned * price * (1 - self.trading_cost)
+            self.stock_owned = 0
 
         self.current_step += 1
-        done = self.current_step >= len(self.df) - 1
-        current_price = self._get_price()
-        self.portfolio_value = self.cash + self.position * current_price
+        done = self.current_step >= len(self.data) - 1
+        new_price = float(self.data.iloc[self.current_step]["Close"])
+        portfolio_value = self.cash + self.stock_owned * new_price
+        self.portfolio_value.append(portfolio_value)
+        reward = portfolio_value - self.portfolio_value[-2]
 
-        reward = self._compute_reward(action)
+        return self._get_observation(), reward, done, {}
 
-        return self._get_observation(), reward, done, {
-            'portfolio': self.portfolio_value,
-            'cash': self.cash,
-            'position': self.position
-        }
-
-    def _compute_reward(self, action):
-        base_return = (self.portfolio_value - self.initial_cash) / self.initial_cash
-        cost_penalty = self.trading_cost * abs(action - 1)  # 1 = hold
-        return base_return - cost_penalty
-
-    def _get_observation(self):
-        market_state = self.df.iloc[self.current_step].values.astype(np.float32)
-        cash_ratio = self.cash / (self.portfolio_value + 1e-8)
-        obs = np.concatenate([market_state, [self.position, cash_ratio]])
-        return obs
-
-    def _get_price(self):
-        return float(self.df.iloc[self.current_step]['Close'])
+    def get_portfolio_value(self):
+        return self.portfolio_value

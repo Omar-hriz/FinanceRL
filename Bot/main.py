@@ -1,17 +1,19 @@
+import yfinance as yf
 import pandas as pd
 from envs.base_market_env import BaseMarketEnv
+from agents.hold_buy_agent import HoldBuyAgent
+import os
 
-# Exemple avec des données fictives
-df = pd.DataFrame({
-    'Close': [100, 102, 101, 105, 108],
-    'Volume': [1000, 1100, 1050, 1200, 1150]
-})
+# 1. Télécharger les données
+df_full = yf.download("AAPL", period="6mo", interval="1d").dropna().reset_index()
+df_full.to_csv("data/AAPL.csv", index=False)  # pour le dashboard
 
-env = BaseMarketEnv(df)
-obs = env.reset()
+# 2. Extraire uniquement les colonnes numériques pour l'environnement
+df = df_full[["Close", "Volume"]]
 
-done = False
-while not done:
-    action = env.action_space.sample()  # test aléatoire
-    obs, reward, done, info = env.step(action)
-    print(f"Step: {env.current_step}, Action: {action}, Reward: {reward:.4f}, Portfolio: {info['portfolio']:.2f}")
+# 3. Initialiser l'environnement
+env = BaseMarketEnv(df, initial_cash=1000.0, trading_cost=0.001)
+
+# 4. Créer et entraîner l'agent
+agent = HoldBuyAgent(env)
+agent.train()

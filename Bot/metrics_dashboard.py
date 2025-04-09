@@ -7,9 +7,15 @@ import altair as alt
 st.set_page_config(page_title="📊 Résultats RL Trading", layout="centered")
 st.title("📈 Résultats de l’agent de trading")
 
-log_path = "logs.json"
+import streamlit as st
+import pandas as pd
+import altair as alt
+import json
+import os
 
-data_path = "data/AAPL.csv"
+# Fichiers utilisés
+log_path = "logs.json"
+data_path = "data/comodity egg.xlsx"  # ⬅️ Remplace ici par sugar, rice, chili, etc.
 
 if os.path.exists(log_path):
     with open(log_path, "r") as f:
@@ -18,6 +24,8 @@ if os.path.exists(log_path):
     rewards = data.get("rewards", [])
     entropy = data.get("entropy", [])
     last_state = data.get("state", {})
+
+    st.title("📊 Résultats de l'agent sur une commodité")
 
     st.subheader("💰 Portefeuille final")
     col1, col2, col3 = st.columns(3)
@@ -31,27 +39,25 @@ if os.path.exists(log_path):
     st.subheader("📊 Entropie des actions (proxy)")
     st.line_chart(entropy)
 
-    # 🔍 Affichage amélioré des données d'entraînement avec date
+    # 🔍 Affichage de la courbe de prix de la commodité utilisée
     if os.path.exists(data_path):
-        st.subheader("📈 Donnée utilisée pour l'entraînement")
-        df = pd.read_csv(data_path)
-
-        # S'assurer qu'on a une colonne Date utilisable
-        if "Date" in df.columns:
-            df["Date"] = pd.to_datetime(df["Date"])
+        st.subheader("📈 Prix de la commodité pendant l'entraînement")
+        df = pd.read_excel(data_path)
+        df["Tanggal"] = pd.to_datetime(df["Tanggal"])
+        df = df.rename(columns={"Kota Semarang": "Close","Tanggal":"Datetime"})
+        if "Datetime" in df.columns:
+            df["Datetime"] = pd.to_datetime(df["Datetime"])
             chart = alt.Chart(df).mark_line().encode(
-                x=alt.X("Date:T", title="Date"),
-                y=alt.Y("Close:Q", title="Prix de clôture"),
-                tooltip=["Date", "Close", "Volume"]
+                x=alt.X("Datetime:T", title="Date"),
+                y=alt.Y("Close:Q", title="Prix"),
+                tooltip=["Datetime", "Close"]
             ).properties(
                 width=700,
                 height=300,
-                title="Évolution du prix de clôture"
+                title="Évolution du prix de la commodité"
             ).interactive()
             st.altair_chart(chart, use_container_width=True)
         else:
-            st.warning("La colonne 'Date' est absente du fichier de données.")
-
-    st.success("✅ Visualisation chargée avec succès.")
+            st.warning("La colonne 'Datetime' est absente du fichier de données.")
 else:
-    st.error("Aucun fichier 'logs.json' trouvé. Veuillez lancer un entraînement d'abord.")
+    st.error("Aucun fichier de log trouvé. Veuillez entraîner un agent d'abord.")

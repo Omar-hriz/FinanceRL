@@ -1,62 +1,38 @@
 import yfinance as yf
 import pandas as pd
-import matplotlib.pyplot as plt
-import os
 
-from envs.base_market_env import BaseMarketEnv
-from agents.hold_buy_agent import HoldBuyAgent
 from agents.random_agent import RandomAgent
-from agents.buy_and_sell_agent import BuyAndSellAgent
+from envs.base_market_env import BaseMarketEnv
 from agents.dqn_agent import DQNAgent
+import os
+import torch
 
+print(torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
 # 1. Télécharger les données
-df_full = yf.download("AAPL", period="6mo", interval="1d").dropna().reset_index()
-os.makedirs("data", exist_ok=True)
-df_full.to_csv("data/AAPL.csv", index=False)
+print("📥 Téléchargement des données...")
+# df_full = yf.download("AAPL", period="36mo", interval="1d").dropna().reset_index()
+# os.makedirs("data", exist_ok=True)
+# df_full.to_csv("data/AAPL.csv", index=False)  # pour le dashboard
+#
+# # 2. Extraire uniquement les colonnes numériques pour l'environnement
+# df = df_full[["Close", "Volume"]]
+# 2. Charger et préparer les données de commodité
+df = pd.read_excel("data/comodity egg.xlsx")
+df["Tanggal"] = pd.to_datetime(df["Tanggal"])
+df = df.rename(columns={"Kota Semarang": "Close"})
+df["Volume"] = 1000
 
-# 2. Extraire uniquement les colonnes numériques utiles
-df = df_full[["Close", "Volume"]]
+# 3. Initialiser l’environnement avec uniquement les colonnes numériques
+env = BaseMarketEnv(df[["Close", "Volume"]], initial_cash=1000.0, trading_cost=0.001, history_length=5)
 
-# 3. Initialiser l’environnement
-env_base = BaseMarketEnv(df, initial_cash=1000.0, trading_cost=0.001)
+# 4. Créer et entraîner l'agent DQN
+#agent = DQNAgent(env, batch_size=32)
+agent.train(episodes=100)
 
-# 4. Définir les agents
-agents = {
-    "Hold & Buy": HoldBuyAgent,
-    "Random": RandomAgent,
-    "Buy & Sell Alterné": BuyAndSellAgent,
-    "DQN": DQNAgent,
-}
+# randomn agent
+agent = RandomAgent(env)
+agent.train()
+total_reward, portfolio_values, history = agent.run(log_file="logs/logs_random.json")
 
-results = {}
 
-# 5. Entraîner et exécuter chaque agent
-for name, AgentClass in agents.items():
-    print(f"\n▶ Agent : {name}")
-    # Recréer un environnement propre pour chaque agent
-    env = BaseMarketEnv(df, initial_cash=1000.0, trading_cost=0.001)
-
-    # Créer l'agent
-    if name == "DQN":
-        agent = AgentClass(env, history_length=1)
-        agent.train(episodes=10)
-    else:
-        agent = AgentClass(env)
-        agent.train()
-
-    # Exécuter l'agent
-    total_reward, portfolio_values = agent.run()
-    print(f"{name} - Reward: {total_reward:.2f} | Final Value: {portfolio_values[-1]:.2f}")
-    results[name] = portfolio_values
-
-# 6. Afficher les courbes
-plt.figure(figsize=(12, 6))
-for name, values in results.items():
-    plt.plot(values, label=name)
-plt.title("Évolution de la valeur du portefeuille selon l'agent")
-plt.xlabel("Jour")
-plt.ylabel("Valeur du portefeuille ($)")
-plt.legend()
-plt.grid(True)
-plt.tight_layout()
-plt.show()
+print("✅ Entraînement terminé.")

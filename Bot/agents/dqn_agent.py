@@ -1,8 +1,16 @@
+# 📁 agents/dqn_agent.py
+# Agent DQN avec entropie softmax corrigée + batching optimisé + batch size fixe + CPU only + epsilon constant
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import random
 import numpy as np
+import json
+import os
+from tqdm import trange
+import torch.nn.functional as F
+
 
 class QNetwork(nn.Module):
     def __init__(self, input_dim, output_dim, hidden_dim=64):
@@ -15,90 +23,114 @@ class QNetwork(nn.Module):
         x = self.relu(self.fc1(x))
         return self.fc2(x)
 
+
 class DQNAgent:
-    def __init__(self, env, history_length=10):
+    def __init__(self, env, history_length=10, batch_size=64):
         self.env = env
         self.history_length = history_length
+        self.batch_size = batch_size
         self.actions = ["buy", "sell", "hold"]
-        self.input_dim = len(self.env.data.columns)
+        self.input_dim = env.observation_space.shape[0]
         self.output_dim = len(self.actions)
 
-        self.model = QNetwork(self.input_dim, self.output_dim)
+        self.device = torch.device("cpu")
+        self.model = QNetwork(self.input_dim, self.output_dim).to(self.device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=0.001)
         self.criterion = nn.MSELoss()
 
         self.gamma = 0.95
-        self.epsilon = 1.0
-        self.epsilon_decay = 0.995
-        self.epsilon_min = 0.01
+        self.epsilon = 0.5  # constante
         self.memory = []
+
+        self.logs = {
+            "rewards": [],
+            "entropy": [],
+            "log": [],
+            "state": {}
+        }
 
     def remember(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))
-        if len(self.memory) > 1000:
+        if len(self.memory) > 10000:
             self.memory.pop(0)
 
     def select_action(self, state):
         if np.random.rand() <= self.epsilon:
-            return random.choice(self.actions)
-        state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+            return random.choice(self.actions), np.array([1 / 3, 1 / 3, 1 / 3])
+        state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(self.device)
         with torch.no_grad():
             q_values = self.model(state_tensor)
-        return self.actions[torch.argmax(q_values).item()]
+            probs = F.softmax(q_values, dim=1).cpu().numpy().flatten()
+        return self.actions[np.argmax(probs)], probs
 
     def train(self, episodes=10):
-        for _ in range(episodes):
+        for ep in trange(episodes, desc="📈 Entraînement DQN"):
             state = self._get_state(self.env.reset())
             done = False
+            step = 0
+            total_reward = 0
+            entropy_list = []
+            episode_log = []
+
             while not done:
-                action = self.select_action(state)
-                raw_state, reward, done, _ = self.env.step(action)
+                action, probs = self.select_action(state)
+                entropy = -np.sum(probs * np.log2(probs + 1e-10))
+                entropy_list.append(entropy)
+
+                raw_state, reward, done, info = self.env.step(self.actions.index(action))
                 next_state = self._get_state(raw_state)
 
                 self.remember(state, action, reward, next_state, done)
+                total_reward += reward
+                episode_log.append({"step": step, "action": action, "reward": reward, **info})
+                self.logs["state"] = info
 
-                if len(self.memory) > 32:
-                    self._replay(32)
+                if len(self.memory) > self.batch_size:
+                    self._replay()
 
                 state = next_state
+                step += 1
 
-            if self.epsilon > self.epsilon_min:
-                self.epsilon *= self.epsilon_decay
+            self.logs["rewards"].append(total_reward)
+            self.logs["entropy"].append(float(np.mean(entropy_list)))
+            self.logs["log"].extend(episode_log)
 
-    def _replay(self, batch_size):
-        batch = random.sample(self.memory, batch_size)
-        for state, action, reward, next_state, done in batch:
-            state_tensor = torch.tensor(state, dtype=torch.float32)
-            next_state_tensor = torch.tensor(next_state, dtype=torch.float32)
+            print(
+                f"Épisode {ep + 1}/{episodes} | Total Reward: {total_reward:.2f} | Entropy: {np.mean(entropy_list):.4f} | Portefeuille: {info['portfolio']:.2f} €")
 
-            target = reward
-            if not done:
-                with torch.no_grad():
-                    target += self.gamma * torch.max(self.model(next_state_tensor.unsqueeze(0)))
+        self._save_logs()
 
-            output = self.model(state_tensor.unsqueeze(0))[0]
-            target_f = output.clone().detach()
-            target_f[self.actions.index(action)] = target
+    def _replay(self):
+        batch = random.sample(self.memory, self.batch_size)
+        states, actions, rewards, next_states, dones = zip(*batch)
 
-            loss = self.criterion(output, target_f)
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
+        states_tensor = torch.tensor(np.array(states), dtype=torch.float32).to(self.device)
+        next_states_tensor = torch.tensor(np.array(next_states), dtype=torch.float32).to(self.device)
+        actions_tensor = torch.tensor([self.actions.index(a) for a in actions], dtype=torch.long).to(self.device)
+        rewards_tensor = torch.tensor(rewards, dtype=torch.float32).to(self.device)
+        dones_tensor = torch.tensor(dones, dtype=torch.float32).to(self.device)
+
+        q_values = self.model(states_tensor)
+        next_q_values = self.model(next_states_tensor)
+
+        target_q_values = q_values.clone().detach()
+        for i in range(self.batch_size):
+            target = rewards_tensor[i]
+            if not dones_tensor[i]:
+                target += self.gamma * torch.max(next_q_values[i])
+            target_q_values[i][actions_tensor[i]] = target
+
+        loss = self.criterion(q_values, target_q_values)
+        self.optimizer.zero_grad()
+        self.optimizer.step()
 
     def _get_state(self, raw_state):
         if isinstance(raw_state, np.ndarray):
             return raw_state.flatten()
         return np.array(raw_state).flatten()
 
-    def run(self):
-        state = self._get_state(self.env.reset())
-        done = False
-        portfolio = []
-
-        while not done:
-            action = self.select_action(state)
-            raw_state, reward, done, _ = self.env.step(action)
-            state = self._get_state(raw_state)
-            portfolio.append(self.env.portfolio_value[-1])
-
-        return portfolio[-1] - portfolio[0], portfolio
+    def _save_logs(self):
+        os.makedirs("data", exist_ok=True)
+        with open("logs.json", "w") as f:
+            json.dump(self.logs, f)
+        print("📁 Logs sauvegardés dans logs.json")

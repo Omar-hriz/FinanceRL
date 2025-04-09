@@ -42,14 +42,15 @@ if os.path.exists(log_path):
     # 🔍 Affichage de la courbe de prix de la commodité utilisée
     if os.path.exists(data_path):
         st.subheader("📈 Prix de la commodité pendant l'entraînement")
-        df = pd.read_csv(data_path)
-
+        df = pd.read_excel(data_path)
+        df["Tanggal"] = pd.to_datetime(df["Tanggal"])
+        df = df.rename(columns={"Kota Semarang": "Close","Tanggal":"Datetime"})
         if "Datetime" in df.columns:
             df["Datetime"] = pd.to_datetime(df["Datetime"])
             chart = alt.Chart(df).mark_line().encode(
                 x=alt.X("Datetime:T", title="Date"),
                 y=alt.Y("Close:Q", title="Prix"),
-                tooltip=["Datetime", "Close", "Volume"]
+                tooltip=["Datetime", "Close"]
             ).properties(
                 width=700,
                 height=300,

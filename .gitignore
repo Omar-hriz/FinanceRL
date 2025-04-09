@@ -3,3 +3,5 @@ logs.json
 __pycache__/
 .ipynb_checkpoints/
 .env
+.venv/
+*.pyc

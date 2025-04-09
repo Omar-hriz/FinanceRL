@@ -113,6 +113,7 @@ class DQNAgent:
             self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
 
         self._save_logs()
+        self._save_model()
 
     def _replay(self):
         batch = random.sample(self.memory, self.batch_size)
@@ -130,9 +131,6 @@ class DQNAgent:
         rewards_tensor = torch.tensor(rewards, dtype=torch.float32).to(self.device)
         dones_tensor = torch.tensor(dones, dtype=torch.float32).to(self.device)
 
-        # Optionnel : standardisation des récompenses
-        # rewards_tensor = (rewards_tensor - rewards_tensor.mean()) / (rewards_tensor.std() + 1e-8)
-
         q_values = self.model(states_tensor)
         next_q_values = self.target_model(next_states_tensor)
 
@@ -140,7 +138,6 @@ class DQNAgent:
         max_next_q = torch.max(next_q_values, dim=1)[0]
         target_q = rewards_tensor + (1 - dones_tensor) * self.gamma * max_next_q
 
-        # Clipping des cibles
         target_q = torch.clamp(target_q, -10.0, 10.0)
 
         loss = self.criterion(q_action, target_q.detach())
@@ -161,3 +158,8 @@ class DQNAgent:
         with open("logs.json", "w") as f:
             json.dump(self.logs, f)
         print("📁 Logs sauvegardés dans logs.json")
+
+    def _save_model(self, path="models/dqn_model.pth"):
+        os.makedirs("models", exist_ok=True)
+        torch.save(self.model.state_dict(), path)
+        print(f"📁 Modèle sauvegardé dans {path}")

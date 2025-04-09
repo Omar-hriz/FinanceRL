@@ -1,20 +1,16 @@
 import streamlit as st
-import json
-import os
 import pandas as pd
 import altair as alt
+import json
+import os
 
 st.set_page_config(page_title="📊 Résultats RL Trading", layout="centered")
 st.title("📈 Résultats de l’agent de trading")
 
 import streamlit as st
-import pandas as pd
-import altair as alt
-import json
-import os
 
 # Fichiers utilisés
-log_path = "logs.json"
+log_path = "logs_egg.json"
 data_path = "data/comodity egg.xlsx"  # ⬅️ Remplace ici par sugar, rice, chili, etc.
 
 if os.path.exists(log_path):

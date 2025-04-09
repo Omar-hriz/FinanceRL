@@ -1,5 +1,5 @@
 # 📁 agents/dqn_agent.py
-# Agent DQN avec entropie softmax + batching optimisé + batch size fixe + CPU only + epsilon constant
+# Agent DQN avec entropie softmax corrigée + batching optimisé + batch size fixe + CPU only + epsilon constant
 
 import torch
 import torch.nn as nn
@@ -10,6 +10,7 @@ import json
 import os
 from tqdm import trange
 import torch.nn.functional as F
+
 
 class QNetwork(nn.Module):
     def __init__(self, input_dim, output_dim, hidden_dim=64):
@@ -32,13 +33,13 @@ class DQNAgent:
         self.input_dim = env.observation_space.shape[0]
         self.output_dim = len(self.actions)
 
-        self.device = torch.device("cpu")  # ⚠️ CPU only
+        self.device = torch.device("cpu")
         self.model = QNetwork(self.input_dim, self.output_dim).to(self.device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=0.001)
         self.criterion = nn.MSELoss()
 
         self.gamma = 0.95
-        self.epsilon = 0.9  # constante, plus de décroissance
+        self.epsilon = 0.5  # constante
         self.memory = []
 
         self.logs = {
@@ -55,11 +56,12 @@ class DQNAgent:
 
     def select_action(self, state):
         if np.random.rand() <= self.epsilon:
-            return random.choice(self.actions)
+            return random.choice(self.actions), np.array([1 / 3, 1 / 3, 1 / 3])
         state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(self.device)
         with torch.no_grad():
             q_values = self.model(state_tensor)
-        return self.actions[torch.argmax(q_values).item()]
+            probs = F.softmax(q_values, dim=1).cpu().numpy().flatten()
+        return self.actions[np.argmax(probs)], probs
 
     def train(self, episodes=10):
         for ep in trange(episodes, desc="📈 Entraînement DQN"):
@@ -71,14 +73,10 @@ class DQNAgent:
             episode_log = []
 
             while not done:
-                state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(self.device)
-                with torch.no_grad():
-                    q_values = self.model(state_tensor)
-                    probs = F.softmax(q_values, dim=1).squeeze()
-                    entropy = -torch.sum(probs * torch.log2(probs + 1e-10)).item()
-                    entropy_list.append(entropy)
+                action, probs = self.select_action(state)
+                entropy = -np.sum(probs * np.log2(probs + 1e-10))
+                entropy_list.append(entropy)
 
-                action = self.select_action(state)
                 raw_state, reward, done, info = self.env.step(self.actions.index(action))
                 next_state = self._get_state(raw_state)
 
@@ -97,7 +95,8 @@ class DQNAgent:
             self.logs["entropy"].append(float(np.mean(entropy_list)))
             self.logs["log"].extend(episode_log)
 
-            print(f"Épisode {ep+1}/{episodes} | Total Reward: {total_reward:.2f} | Entropy: {np.mean(entropy_list):.4f} | Portefeuille: {info['portfolio']:.2f} €")
+            print(
+                f"Épisode {ep + 1}/{episodes} | Total Reward: {total_reward:.2f} | Entropy: {np.mean(entropy_list):.4f} | Portefeuille: {info['portfolio']:.2f} €")
 
         self._save_logs()
 

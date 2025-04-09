@@ -14,7 +14,7 @@ class BaseMarketEnv(gym.Env):
         self.cash = initial_cash
         self.position = 0
         self.portfolio_value = self.cash
-
+        self.past_values = []
         self.action_space = spaces.Discrete(3)
 
         self.observation_space = spaces.Box(
@@ -48,7 +48,7 @@ class BaseMarketEnv(gym.Env):
         self.portfolio_value = self.cash + self.position * current_price
 
         reward = self._compute_reward(action)
-
+        self.past_values.append(self.portfolio_value)
         return self._get_observation(), reward, done, {
             'portfolio': self.portfolio_value,
             'cash': self.cash,
@@ -56,8 +56,12 @@ class BaseMarketEnv(gym.Env):
         }
 
     def _compute_reward(self, action):
-        base_return = (self.portfolio_value - self.initial_cash) / self.initial_cash
-        cost_penalty = self.trading_cost * abs(action - 1)  # 1 = hold
+        if len(self.past_values) >= 2:
+            delta = self.portfolio_value - self.past_values[-2]
+            base_return = delta / (self.past_values[-2] + 1e-8)
+        else:
+            base_return = 0.0
+        cost_penalty = self.trading_cost * abs(action - 1)
         return base_return - cost_penalty
 
     def _get_observation(self):

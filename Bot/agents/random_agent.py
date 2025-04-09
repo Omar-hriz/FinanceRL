@@ -21,18 +21,19 @@ class RandomAgent:
 
         while not done:
             action = random.choice(self.actions)
-            state, reward, done, _ = self.env.step(action)
+            state, reward, done, _ = self.env.step(self.actions.index(action))
 
             actions_taken.append(action)
             rewards.append(reward)
-            portfolio.append(self.env.portfolio_value[-1])
-            history.append((self.env.portfolio_value[-1], action))
+            current_value = float(self.env.past_values[-1])
+            portfolio.append(current_value)
+            history.append((current_value, action))
 
         # État final
         final_state = {
-            "portfolio": self.env.portfolio_value[-1],
+            "portfolio": self.env.past_values[-1],
             "cash": self.env.cash,
-            "position": self.env.stock_owned
+            "position": self.env.position,
         }
 
         # Structure du log
@@ -45,8 +46,8 @@ class RandomAgent:
             "history": history
         }
 
-        os.makedirs("logs", exist_ok=True)
-        with open(os.path.join("logs", log_file), "w") as f:
+        #os.makedirs("logs", exist_ok=True)
+        with open(os.path.join("./", log_file), "w") as f:
             json.dump(logs, f, indent=4)
 
         return portfolio[-1] - portfolio[0], portfolio, history

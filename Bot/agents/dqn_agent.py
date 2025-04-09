@@ -1,6 +1,3 @@
-# 📁 agents/dqn_agent.py
-# Agent DQN avec entropie softmax corrigée + batching optimisé + batch size fixe + CPU only + epsilon constant
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -22,7 +19,6 @@ class QNetwork(nn.Module):
     def forward(self, x):
         x = self.relu(self.fc1(x))
         return self.fc2(x)
-
 
 class DQNAgent:
     def __init__(self, env, history_length=10, batch_size=64):
@@ -46,7 +42,11 @@ class DQNAgent:
             "rewards": [],
             "entropy": [],
             "log": [],
-            "state": {}
+            "state": {},
+            "losses": [],
+            "portfolio_values": [],
+            "actions": [],
+            "history": []
         }
 
     def remember(self, state, action, reward, next_state, done):
@@ -71,6 +71,11 @@ class DQNAgent:
             total_reward = 0
             entropy_list = []
             episode_log = []
+            episode_losses = []
+
+            episode_portfolio = []
+            episode_actions = []
+            episode_history = []
 
             while not done:
                 action, probs = self.select_action(state)
@@ -85,18 +90,33 @@ class DQNAgent:
                 episode_log.append({"step": step, "action": action, "reward": reward, **info})
                 self.logs["state"] = info
 
+                current_value = float(self.env.past_values[-1])
+                episode_portfolio.append(current_value)
+                episode_actions.append(action)
+                episode_history.append((current_value, action))
+
                 if len(self.memory) > self.batch_size:
-                    self._replay()
+                    loss = self._replay()
+                    episode_losses.append(loss)
 
                 state = next_state
                 step += 1
 
+            avg_loss = np.mean(episode_losses) if episode_losses else 0.0
             self.logs["rewards"].append(total_reward)
             self.logs["entropy"].append(float(np.mean(entropy_list)))
+            self.logs["losses"].append(avg_loss)
             self.logs["log"].extend(episode_log)
 
+            self.logs["portfolio_values"].append(episode_portfolio)
+            self.logs["actions"].append(episode_actions)
+            self.logs["history"].append(episode_history)
+
             print(
-                f"Épisode {ep + 1}/{episodes} | Total Reward: {total_reward:.2f} | Entropy: {np.mean(entropy_list):.4f} | Portefeuille: {info['portfolio']:.2f} €")
+                f"Épisode {ep + 1}/{episodes} | Total Reward: {total_reward:.2f} "
+                f"| Loss: {avg_loss:.4f} | Entropy: {np.mean(entropy_list):.4f} "
+                f"| Portefeuille: {info['portfolio']:.2f} €"
+            )
 
         self._save_logs()
 
@@ -122,7 +142,9 @@ class DQNAgent:
 
         loss = self.criterion(q_values, target_q_values)
         self.optimizer.zero_grad()
+        loss.backward()
         self.optimizer.step()
+        return loss.item()
 
     def _get_state(self, raw_state):
         if isinstance(raw_state, np.ndarray):

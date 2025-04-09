@@ -26,13 +26,13 @@ df["Volume"] = 1000
 env = BaseMarketEnv(df[["Close", "Volume"]], initial_cash=1000.0, trading_cost=0.001, history_length=5)
 
 # 4. Créer et entraîner l'agent DQN
-#agent = DQNAgent(env, batch_size=32)
-agent.train(episodes=100)
+agent = DQNAgent(env, batch_size=32)
+agent.train(episodes=30)
 
 # randomn agent
-agent = RandomAgent(env)
-agent.train()
-total_reward, portfolio_values, history = agent.run(log_file="logs/logs_random.json")
+agent_rad = RandomAgent(env)
+agent_rad.train()
+total_reward, portfolio_values, history = agent_rad.run(log_file="logs_random.json")
 
 
 print("✅ Entraînement terminé.")

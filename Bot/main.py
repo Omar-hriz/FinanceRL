@@ -25,6 +25,6 @@ env = BaseMarketEnv(df[["Close", "Volume"]], initial_cash=1000.0, trading_cost=0
 
 # 4. Créer et entraîner l'agent DQN
 agent = DQNAgent(env, batch_size=32)
-agent.train(episodes=100)
+agent.train(episodes=30)
 
 print("✅ Entraînement terminé.")

@@ -22,7 +22,7 @@ if os.path.exists(log_path):
         data = json.load(f)
 
     rewards = data.get("rewards", [])
-    entropy = data.get("entropy", [])
+    losses = data.get("losses", [])
     last_state = data.get("state", {})
 
     st.title("📊 Résultats de l'agent sur une commodité")
@@ -37,25 +37,29 @@ if os.path.exists(log_path):
     st.line_chart(rewards)
 
     st.subheader("📊 Entropie des actions (proxy)")
-    st.line_chart(entropy)
+    st.line_chart(losses)
 
     # 🔍 Affichage de la courbe de prix de la commodité utilisée
     if os.path.exists(data_path):
         st.subheader("📈 Prix de la commodité pendant l'entraînement")
         df = pd.read_excel(data_path)
         df["Tanggal"] = pd.to_datetime(df["Tanggal"])
-        df = df.rename(columns={"Kota Semarang": "Close","Tanggal":"Datetime"})
+        df = df.rename(columns={"Kota Semarang": "Close", "Tanggal": "Datetime"})
         if "Datetime" in df.columns:
             df["Datetime"] = pd.to_datetime(df["Datetime"])
-            chart = alt.Chart(df).mark_line().encode(
-                x=alt.X("Datetime:T", title="Date"),
-                y=alt.Y("Close:Q", title="Prix"),
-                tooltip=["Datetime", "Close"]
-            ).properties(
-                width=700,
-                height=300,
-                title="Évolution du prix de la commodité"
-            ).interactive()
+            chart = (
+                alt.Chart(df)
+                .mark_line()
+                .encode(
+                    x=alt.X("Datetime:T", title="Date"),
+                    y=alt.Y("Close:Q", title="Prix"),
+                    tooltip=["Datetime", "Close"],
+                )
+                .properties(
+                    width=700, height=300, title="Évolution du prix de la commodité"
+                )
+                .interactive()
+            )
             st.altair_chart(chart, use_container_width=True)
         else:
             st.warning("La colonne 'Datetime' est absente du fichier de données.")
